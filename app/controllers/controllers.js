@@ -188,16 +188,26 @@ exports.showAllTeams = (req, res) => {
 
 // Handles teammate evaluation
 exports.evaluateTeammate = async (req, res) => {
+  // Check if user is logged in (session should exist)
+  if (!req.session.user || !req.session.user.id) {
+    return res.redirect("/login"); // Redirect to login page if user is not logged in
+  }
+
   const teammateID = req.params.id;
   const reviewerID = req.session.user.id;
 
-  let sql =
-    `SELECT * FROM evaluations WHERE ` +
-    `teammateID = ${teammateID} AND reviewerID = ${reviewerID}`;
+  console.log("Teammate ID:", teammateID);
+  console.log("Reviewer ID:", reviewerID);
 
+  if (!teammateID || !reviewerID) {
+    return res.status(400).send("Invalid IDs provided.");
+  }
+
+  let sql = `SELECT * FROM evaluations WHERE teammateID = ${teammateID} AND reviewerID = ${reviewerID}`;
+  
   const result = await db.query(sql);
 
-  // Checks if an evaluation has been submitted already
+  // Check if an evaluation has already been submitted
   if (result[0].length > 0) {
     res.render("ViewEvaluation.ejs", { review: result[0][0] });
   } else {
@@ -209,6 +219,8 @@ exports.evaluateTeammate = async (req, res) => {
       .catch((err) => console.log(err));
   }
 };
+
+
 
 exports.submitEvaluation = (req, res) => {
   const { teammateID,TypeOfEval, score, comments, } = req.body;
@@ -253,4 +265,33 @@ exports.allEval = (req,res) => {
     console.error("Error fetching evaluations:", error);
     res.status(500).send("Error retrieving evaluations");
   });
+};
+exports.submitEvaluation = (req, res) => {
+  const { teammateID } = req.body;
+  const reviewerID = req.session.user.id;
+
+  // Collecting scores and comments for each category
+  const evaluations = [
+    { type: 'Cooperation', score: req.body.score_cooperation, comments: req.body.comment_cooperation },
+    { type: 'WorkEthic', score: req.body.score_ethics, comments: req.body.comment_ethics },
+    { type: 'PracticalContribution', score: req.body.score_pcontribution, comments: req.body.comment_pcontribution },
+    { type: 'ConceptualContribution', score: req.body.score_contribution, comments: req.body.comment_ccontribution }
+  ];
+
+  // Loop through each category and insert into the database
+  evaluations.forEach(evaluation => {
+    const { type, score, comments } = evaluation;
+
+    const sql =
+      "INSERT INTO evaluations (teammateID, TypeOfEval, score, comments, reviewerID) " +
+      "VALUES (?, ?, ?, ?, ?)";
+
+    db.query(sql, [teammateID, type, score, comments, reviewerID], (err, result) => {
+      if (err) {
+        console.log(err);
+      }
+    });
+  });
+
+  res.redirect("/teammates"); // Redirect to teammates page after submission
 };
